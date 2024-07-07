@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: example_package_me
+Version: 0.0.1
+Summary: An example package
+Author: Your Name
+Author-email: your.email@example.com
+Description-Content-Type: text/markdown
+
+hello this is python whl file
