@@ -1,0 +1,65 @@
+name: Build and Deploy Wheel to Databricks
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push for main and dev branch
+  push:
+    branches:
+      # Set your base branch name here
+      - main
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "deploy"
+  deploy:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    env:
+      DBFS_LIB_PATH: dbfs:/Users/anusha.chebolu@entegrata.com/
+      REPO_PATH: /Repos/anusha.chebolu@domain.com/_____
+      LATEST_WHEEL_NAME: example_package_me-0.0.1-py3-none-any.whl
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks out your repository, so the job can access it
+      - uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          # Version range or exact version of a Python version to use.
+          python-version: 3.10
+
+      - name: Install mods
+        run: |
+          pip install databricks-cli
+          pip install pytest setuptools wheel
+
+      - name: Configure CLI
+        run: |
+          echo "${{ secrets.DEPLOYMENT_TARGET_URL }} ${{ secrets.DEPLOYMENT_TARGET_TOKEN }}" | databricks configure --token
+      
+      - name: Extract branch name
+        shell: bash
+        # Specifies that the output variable is named branch
+        # Uses Bash parameter expansion to remove the refs/heads/ prefix from the GITHUB_REF environment variable, leaving just the branch name.
+        run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"  
+        id: extract_branch
+
+        # This below step updates the Databricks Git repository using the Databricks CLI. 
+        # The 'databricks repos update' command updates the Git repository at the specified path in the Databricks workspace.
+        # The '--path ${{env.REPO_PATH}}' option specifies the path of the repository in the Databricks workspace, using the REPO_PATH environment variable defined earlier.
+        # The '--branch "${{ steps.extract_branch.outputs.branch }}"' option specifies the branch to update, using the branch name extracted in the previous step.
+        
+      - name: Update Databricks Git folder
+        run: |
+          databricks repos update --path ${{env.REPO_PATH}} --branch "${{ steps.extract_branch.outputs.branch }}"
+
+
+      - name: Build Wheel and send to Databricks workspace DBFS location
+        run: |
+          cd $GITHUB_WORKSPACE
+          python setup.py bdist_wheel
+          dbfs cp --overwrite ./dist/* ${{env.DBFS_LIB_PATH}}
+          # There is only one wheel file; this line copies it with the original version number in the file name and overwrites if that version of wheel exists; it does not affect the other files in the path
+          dbfs cp --overwrite ./dist/* ${{env.DBFS_LIB_PATH}}${{env.LATEST_WHEEL_NAME}} # This line copies the wheel file and overwrites the latest version with it
